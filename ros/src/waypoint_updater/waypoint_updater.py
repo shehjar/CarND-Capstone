@@ -50,8 +50,8 @@ class WaypointUpdater(object):
         with self.lock:
             waypoints_msg = self.waypoints_msg
 
-        waypoints = waypoints_msg.waypoints
-        if waypoints is not None:
+        if waypoints_msg is not None:
+            waypoints = waypoints_msg.waypoints
             #
             # find a closest waypoint
             #
