@@ -12,6 +12,7 @@ import cv2
 from traffic_light_config import config
 import math
 import numpy as np
+import yaml
 
 STATE_COUNT_THRESHOLD = 3
 
@@ -35,8 +36,10 @@ class TLDetector(object):
         testing your solution in real life so don't rely on it in the final submission.
         '''
         self.traffic_lights_sub = rospy.Subscriber('/vehicle/traffic_lights', TrafficLightArray, self.traffic_cb, queue_size=1)
+        sub6 = rospy.Subscriber('/image_color', Image, self.image_cb, queue_size=1)
 
-        sub6 = rospy.Subscriber('/camera/image_raw', Image, self.image_cb, queue_size=1)
+        config_string = rospy.get_param("/traffic_light_config")
+        self.config = yaml.load(config_string)
 
         self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Point, queue_size=1)
 
@@ -153,11 +156,10 @@ class TLDetector(object):
 
         """
 
-        fx = config.camera_info.focal_length_x
-        fy = config.camera_info.focal_length_y
-
-        image_width = config.camera_info.image_width
-        image_height = config.camera_info.image_height
+        fx = self.config['camera_info']['focal_length_x']
+        fy = self.config['camera_info']['focal_length_y']
+        image_width = self.config['camera_info']['image_width']
+        image_height = self.config['camera_info']['image_height']
 
         # get transform between pose of camera and world frame
         trans = None
@@ -232,6 +234,7 @@ class TLDetector(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
+        light_positions = self.config['light_positions']
         if self.pose is None:
             return
 
