@@ -47,6 +47,7 @@ class Controller(object):
 
         brake = 0.0
         if linear_control < 0.0:
+            rospy.loginfo("BRAKE = %f", linear_control)
             brake = -linear_control
 
         steer = self.yaw_controller.get_steering(target_linear_velocity, target_angular_velocity, current_linear_velocity)
