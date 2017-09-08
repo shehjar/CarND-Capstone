@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 import rospy
-from geometry_msgs.msg import PoseStamped, Point
-from styx_msgs.msg import Lane, Waypoint
+from geometry_msgs.msg import PoseStamped
+from styx_msgs.msg import Lane, Waypoint, TrafficLight
 import math
 import tf
 from multiprocessing import Lock
@@ -33,8 +33,8 @@ class WaypointUpdater(object):
         self.base_waypoints_sub = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
 
         # Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
-        self.base_waypoints_sub = rospy.Subscriber('/traffic_waypoint', Point, self.traffic_cb)
-        self.base_waypoints_sub = rospy.Subscriber('/obstacle_waypoint', Point, self.obstacle_cb)
+        rospy.Subscriber('/traffic_waypoint', TrafficLight, self.traffic_cb, queue_size=1)
+        #self.base_waypoints_sub = rospy.Subscriber('/obstacle_waypoint', Point, self.obstacle_cb)
 
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
@@ -54,6 +54,9 @@ class WaypointUpdater(object):
     def pose_cb(self, msg):
         with self.lock:
             waypoints_msg = self.waypoints_msg
+            closest_tl_idx = self.closest_tl_idx
+            prev_final_waypoints = self.prev_final_waypoints
+            prev_final_waypoints_start_idx = self.prev_final_waypoints_start_idx
 
         if waypoints_msg is not None:
             waypoints = waypoints_msg.waypoints
@@ -85,6 +88,44 @@ class WaypointUpdater(object):
             final_waypoints.waypoints = waypoints[closest_idx:max_idx]
 
             #
+            # Adjust speed for TL with read light if present
+            #
+            tl_distance_idx = closest_tl_idx - closest_idx
+            if tl_distance_idx > 0:
+                #
+                # create a copy of waypoints as they will be modified
+                #
+                final_waypoints.waypoints = copy.deepcopy(final_waypoints.waypoints)
+                #
+                # Get pose velocity using previous final_points if available
+                #
+                prev_final_waypoints_idx = closest_idx - prev_final_waypoints_start_idx
+                if prev_final_waypoints is not None and \
+                    prev_final_waypoints_start_idx >= 0 and prev_final_waypoints_idx < len(prev_final_waypoints):
+
+                    velocity = prev_final_waypoints[prev_final_waypoints_idx].twist.twist.linear.x
+                else:
+                    velocity = final_waypoints.waypoints[0].twist.twist.linear.x
+                #
+                # compute velocity delta reduction per waypoint
+                #
+                delta = velocity / tl_distance_idx
+                #
+                # update waypoints' velocity, set 0 after TL
+                #
+                for idx in range(len(final_waypoints.waypoints)):
+                    if idx < tl_distance_idx:
+                        velocity -= delta
+                    else:
+                        velocity = 0
+                    final_waypoints.waypoints[idx].twist.twist.linear.x = velocity
+            #
+            # save adjusted waypoints
+            #
+            with self.lock:
+                self.prev_final_waypoints = final_waypoints.waypoints
+                self.prev_final_waypoints_start_idx = closest_idx
+            #
             # publish it
             #
             self.final_waypoints_pub.publish(final_waypoints)
@@ -100,21 +141,23 @@ class WaypointUpdater(object):
         self.base_waypoints_sub.unregister()
 
     def traffic_cb(self, msg):
-        # Callback for /traffic_waypoint message. Implement
-        with self.lock:
-            waypoints_msg = self.waypoints_msg
-
-        if waypoints_msg is not None:
-            waypoints = waypoints_msg.waypoints
-
-            #
-            # find a closest waypoint
-            #
-            position = msg
-            closest_tl_idx = self.get_closest_waypoint(waypoints, position)
-
+        # Callback for /traffic_waypoint message.
+        closest_tl_idx = -1
+        if msg.state == TrafficLight.RED:
             with self.lock:
-                self.closest_tl_idx = closest_tl_idx
+                waypoints_msg = self.waypoints_msg
+
+            if waypoints_msg is not None:
+                waypoints = waypoints_msg.waypoints
+
+                #
+                # find a closest waypoint
+                #
+                position = msg.pose.pose.position
+                closest_tl_idx = self.get_closest_waypoint(waypoints, position)
+
+        with self.lock:
+            self.closest_tl_idx = closest_tl_idx
 
     def obstacle_cb(self, msg):
         # TODO: Callback for /obstacle_waypoint message. We will implement it later
@@ -138,8 +181,6 @@ class WaypointUpdater(object):
                 closest_idx = idx
             else:
                 break
-
-        rospy.loginfo("x = %f, y = %f, closest_idx = %f", position.x, position.y, closest_idx)
 
         return closest_idx
 

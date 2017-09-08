@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import rospy
 from std_msgs.msg import Int32
-from geometry_msgs.msg import PoseStamped, Pose, Point
+from geometry_msgs.msg import PoseStamped, Pose
 from styx_msgs.msg import TrafficLightArray, TrafficLight
 from styx_msgs.msg import Lane
 from sensor_msgs.msg import Image
@@ -9,12 +9,20 @@ from cv_bridge import CvBridge
 from light_classification.tl_classifier import TLClassifier
 import tf
 import cv2
-from traffic_light_config import config
 import math
 import numpy as np
 import yaml
 
+
 STATE_COUNT_THRESHOLD = 3
+
+
+class TrafficLightInfo:
+    def __init__(self, x, y, state):
+        self.x = x
+        self.y = y
+        self.state = state
+
 
 class TLDetector(object):
     def __init__(self):
@@ -25,8 +33,8 @@ class TLDetector(object):
         self.camera_image = None
         self.traffic_light_labels = []
 
-        sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
-        sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+        sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
+        #sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
 
         '''
         /vehicle/traffic_lights helps you acquire an accurate ground truth data source for the traffic light
@@ -41,16 +49,15 @@ class TLDetector(object):
         config_string = rospy.get_param("/traffic_light_config")
         self.config = yaml.load(config_string)
 
-        self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Point, queue_size=1)
+        self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', TrafficLight, queue_size=1)
 
         self.bridge = CvBridge()
         self.light_classifier = TLClassifier()
         self.listener = tf.TransformListener()
 
-        self.state = TrafficLight.UNKNOWN
-        self.last_state = TrafficLight.UNKNOWN
-        self.last_wp = -1
+        self.saved_tl_info = TrafficLightInfo(0, 0, TrafficLight.UNKNOWN)
         self.state_count = 0
+        self.traffic_light_labels = None
 
         rospy.spin()
 
@@ -62,7 +69,6 @@ class TLDetector(object):
 
     def traffic_cb(self, msg):
         self.traffic_light_labels = msg.lights
-        self.traffic_lights_sub.unregister()
 
     def image_cb(self, msg):
         """Identifies red lights in the incoming camera image and publishes the index
@@ -72,28 +78,38 @@ class TLDetector(object):
             msg (Image): image from car-mounted camera
 
         """
-        return
         self.has_image = True
         self.camera_image = msg
-        light_wp, state = self.process_traffic_lights()
-
+        #
+        # process_traffic_lights() - use detection
+        # process_traffic_lights_test() - use info from /vehicle/traffic_lights topic
+        #
+        tl_info = self.process_traffic_lights_test()
         '''
         Publish upcoming red lights at camera frequency.
         Each predicted state has to occur `STATE_COUNT_THRESHOLD` number
         of times till we start using it. Otherwise the previous stable state is
         used.
         '''
-        if self.state != state:
+        if self.saved_tl_info.state != tl_info.state:
             self.state_count = 0
-            self.state = state
+            self.saved_tl_info.state = tl_info.state
         elif self.state_count >= STATE_COUNT_THRESHOLD:
-            self.last_state = self.state
-            light_wp = light_wp if state == TrafficLight.RED else -1
-            self.last_wp = light_wp
-            self.upcoming_red_light_pub.publish(Int32(light_wp))
+            self.saved_tl_info = tl_info
         else:
-            self.upcoming_red_light_pub.publish(Int32(self.last_wp))
+            tl_info = self.saved_tl_info
         self.state_count += 1
+
+        #
+        # publish TL info
+        #
+        tl = TrafficLight()
+        tl.state = tl_info.state
+        tl.pose.pose.position.x = tl_info.x
+        tl.pose.pose.position.y = tl_info.y
+        tl.pose.pose.position.z = 0
+        self.upcoming_red_light_pub.publish(tl)
+
 
     def get_closest_traffic_light(self, pose):
         """Identifies the closest traffic light to the given position
@@ -111,26 +127,10 @@ class TLDetector(object):
         max_distance = 100
         min_distance = float("inf")
         traffic_light_idx = -1
-        """
-        for idx, (x, y) in enumerate(config.light_positions):
+        for idx, (x, y) in enumerate(self.config['light_positions']):
             heading = math.atan2((y - pose.position.y), (x - pose.position.x))
             if abs(yaw - heading) < limit_angle:
                 distance = math.sqrt((x - pose.position.x) ** 2 + (y - pose.position.y) ** 2)
-                # ignore traffic light if it is too far
-                if distance > max_distance:
-                    break
-
-                if distance <= min_distance:
-                    traffic_light_idx = idx
-                    min_distance = distance
-                else:
-                    break
-        """
-        for idx, label in enumerate(self.traffic_light_labels):
-            position = label.pose.pose.position
-            heading = math.atan2((position.y - pose.position.y), (position.x - pose.position.x))
-            if abs(yaw - heading) < limit_angle:
-                distance = math.sqrt((position.x - pose.position.x) ** 2 + (position.y - pose.position.y) ** 2)
                 # ignore traffic light if it is too far
                 if distance > max_distance:
                     break
@@ -174,31 +174,7 @@ class TLDetector(object):
         #TODO Use tranform and rotation to calculate 2D position of light in image
         x = 0
         y = 0
-        """
-        if trans is not None:
-            relative = point_in_world + trans
-            rospy.loginfo("px = %f, py = %f, pz = %f", point_in_world[0], point_in_world[1], point_in_world[2])
-            rospy.loginfo("tx = %f, ty = %f, tz = %f", trans[0], trans[1], trans[2])
-            rospy.loginfo("rx = %f, ry = %f, rz = %f", relative[0], relative[1], relative[2])
-            q = np.zeros((4,), dtype=np.float64)
-            q[1:] = relative
-            point_in_camera = tf.transformations.quaternion_multiply(
-                tf.transformations.quaternion_multiply(rot, q),
-                tf.transformations.quaternion_conjugate(rot)
-            )[:3]
 
-            # TODO: convert with focal length
-            image_x = point_in_camera[1]
-            image_y = point_in_camera[2]
-            image_z = point_in_camera[0]
-            rospy.loginfo("x = %f, y = %f, z = %f", image_x, image_y, image_z)
-
-            x = fx * image_x / image_z
-            y = fy * image_y / image_z
-
-            #rospy.loginfo("x = %f, y = %f", x, y)
-
-        """
         return (x, y)
 
     def get_light_state(self, light_location):
@@ -239,22 +215,54 @@ class TLDetector(object):
             return
 
         traffic_light_idx = self.get_closest_traffic_light(self.pose.pose)
-        rospy.loginfo("lx = %f, ly = %f, lz = %f", self.pose.pose.position.x, self.pose.pose.position.y, self.pose.pose.position.z)
 
-        #TODO find the closest visible traffic light (if one exists)
+        # Find the closest visible traffic light (if one exists)
         light_location = None
         if traffic_light_idx >= 0:
-            #light_location = np.array(config.light_positions[traffic_light_idx] + (3.0,))
-            position = self.traffic_light_labels[traffic_light_idx].pose.pose.position
-            #light_location = np.array([position.x, position.y, position.z])
-            self.upcoming_red_light_pub.publish(Point(position.x, position.y, position.z))
+            light_location = np.array(light_positions[traffic_light_idx] + (5.0,))
 
         if light_location is not None:
             state = self.get_light_state(light_location)
-            light_wp = -1
-            return light_wp, state
-        self.waypoints = None
-        return -1, TrafficLight.UNKNOWN
+            return TrafficLightInfo(light_location[0], light_location[1], state)
+
+        return TrafficLightInfo(0, 0, TrafficLight.UNKNOWN)
+
+    def process_traffic_lights_test(self):
+
+        tl_info = TrafficLightInfo(0, 0, TrafficLight.UNKNOWN)
+        if self.pose is None or self.traffic_light_labels is None:
+            return tl_info
+
+        pose = self.pose.pose
+        q = pose.orientation
+        _, _, yaw = tf.transformations.euler_from_quaternion((q.x, q.y, q.z, q.w))
+        limit_angle = math.pi / 2
+        max_distance = 100
+        min_distance = float("inf")
+        traffic_light_idx = -1
+        for idx, label in enumerate(self.traffic_light_labels):
+            position = label.pose.pose.position
+            heading = math.atan2((position.y - pose.position.y), (position.x - pose.position.x))
+            if abs(yaw - heading) < limit_angle:
+                distance = math.sqrt((position.x - pose.position.x) ** 2 + (position.y - pose.position.y) ** 2)
+                # ignore traffic light if it is too far
+                if distance > max_distance:
+                    break
+
+                if distance <= min_distance:
+                    traffic_light_idx = idx
+                    min_distance = distance
+                else:
+                    break
+
+        if traffic_light_idx >= 0:
+            traffic_light_item = self.traffic_light_labels[traffic_light_idx]
+            tl_info.x = traffic_light_item.pose.pose.position.x
+            tl_info.y = traffic_light_item.pose.pose.position.y
+            tl_info.state = traffic_light_item.state
+
+        return tl_info
+
 
 if __name__ == '__main__':
     try:
