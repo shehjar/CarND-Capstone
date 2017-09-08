@@ -9,7 +9,6 @@ from cv_bridge import CvBridge
 from light_classification.tl_classifier import TLClassifier
 import tf
 import cv2
-from traffic_light_config import config
 import math
 import numpy as np
 import yaml
