@@ -16,6 +16,25 @@ import yaml
 
 STATE_COUNT_THRESHOLD = 3
 
+#set the color thresh in HSV space
+#for red, it can be in two ranges 1 and 2
+lower_red_1 = np.array([0,200,200])
+upper_red_1 = np.array([10,255,255])
+
+lower_red_2 = np.array([170,200,200])
+upper_red_2 = np.array([180,200,200])
+
+RED_LIGHT_THRESHOLD = 20
+#for yellow, only one range
+lower_yellow = np.array([25,200,200])
+upper_yellow = np.array([35,255,255])
+
+YELLOW_LIGHT_THRESHOLD = 20
+
+#for green, only one range
+lower_green = np.array([60,200,200])
+upper_green = np.array([70,255,255])
+GREEN_LIGHT_THRESHOLD = 20
 
 class TrafficLightInfo:
     def __init__(self, x, y, state):
@@ -27,7 +46,7 @@ class TrafficLightInfo:
 class TLDetector(object):
     def __init__(self):
         rospy.init_node('tl_detector')
-
+	self.ImageID = 1
         self.pose = None
         self.waypoints_msg = None
         self.camera_image = None
@@ -84,7 +103,7 @@ class TLDetector(object):
         # process_traffic_lights() - use detection
         # process_traffic_lights_test() - use info from /vehicle/traffic_lights topic
         #
-        tl_info = self.process_traffic_lights_test()
+        tl_info = self.process_traffic_lights()
         '''
         Publish upcoming red lights at camera frequency.
         Each predicted state has to occur `STATE_COUNT_THRESHOLD` number
@@ -100,11 +119,9 @@ class TLDetector(object):
             tl_info = self.saved_tl_info
         self.state_count += 1
 
-        #
-        # publish TL info
-        #
-        tl = TrafficLight()
-        tl.state = tl_info.state
+	# publish TL info
+	tl = TrafficLight()
+	tl.state = tl_info.state
         tl.pose.pose.position.x = tl_info.x
         tl.pose.pose.position.y = tl_info.y
         tl.pose.pose.position.z = 0
@@ -219,7 +236,7 @@ class TLDetector(object):
         # Find the closest visible traffic light (if one exists)
         light_location = None
         if traffic_light_idx >= 0:
-            light_location = np.array(light_positions[traffic_light_idx] + (5.0,))
+            light_location = np.array(light_positions[traffic_light_idx])
 
         if light_location is not None:
             state = self.get_light_state(light_location)
