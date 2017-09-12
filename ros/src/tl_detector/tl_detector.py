@@ -70,6 +70,8 @@ class TLDetector(object):
 
         self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', TrafficLight, queue_size=1)
 
+        self.bgr8_pub = rospy.Publisher('/image_color_bgr8', Image, queue_size=1)
+
         self.bridge = CvBridge()
         self.light_classifier = TLClassifier()
         self.listener = tf.TransformListener()
@@ -103,7 +105,8 @@ class TLDetector(object):
         # process_traffic_lights() - use detection
         # process_traffic_lights_test() - use info from /vehicle/traffic_lights topic
         #
-        tl_info = self.process_traffic_lights()
+        self.process_traffic_lights()
+        tl_info = self.process_traffic_lights_test()
         '''
         Publish upcoming red lights at camera frequency.
         Each predicted state has to occur `STATE_COUNT_THRESHOLD` number
@@ -158,7 +161,7 @@ class TLDetector(object):
                 else:
                     break
 
-        rospy.loginfo("traffic_light_idx = %d", traffic_light_idx)
+        #rospy.loginfo("traffic_light_idx = %d", traffic_light_idx)
         return traffic_light_idx
 
     def project_to_image_plane(self, point_in_world):
@@ -182,15 +185,33 @@ class TLDetector(object):
         trans = None
         try:
             now = rospy.Time.now()
+            # Compensate for delay
+            past = now - rospy.Duration(.5)
             self.listener.waitForTransform("/base_link", "/world", now, rospy.Duration(1.0))
-            (trans, rot) = self.listener.lookupTransform("/base_link", "/world", now)
+            (trans, rot) = self.listener.lookupTransform("/base_link", "/world", past)
+            t = tf.transformations.translation_matrix(trans)
+            r = tf.transformations.quaternion_matrix(rot)
+            # Car camera points slightly up
+            camera_angle = 15.0
+            camera_angle = camera_angle * math.pi / 180.0
+            r_camera = tf.transformations.euler_matrix(0, camera_angle, 0)
+            # Combine all matrices
+            m = tf.transformations.concatenate_matrices(r_camera, t, r)
+            p = np.append(point_in_world, 1.0)
+            tp = m.dot(p)
+            # Project
+            x = fx * tp[1] / tp[0]
+            y = fy * tp[2] / tp[0]
+            # Map 2D point to image coordinates
+            x = int((0.5 - x) * image_width)
+            y = int((0.5 - y) * image_height)
 
         except (tf.Exception, tf.LookupException, tf.ConnectivityException):
+            x = 0
+            y = 0
             rospy.logerr("Failed to find camera to map transform")
 
         #TODO Use tranform and rotation to calculate 2D position of light in image
-        x = 0
-        y = 0
 
         return (x, y)
 
@@ -208,10 +229,12 @@ class TLDetector(object):
             self.prev_light_loc = None
             return False
 
-        self.camera_image.encoding = "rgb8"
-        cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
-
+        encoding = 'rgb8'
+        self.camera_image.encoding = encoding
+        cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, encoding)
         x, y = self.project_to_image_plane(light_location)
+        cv2.rectangle(cv_image, (x - 50, y - 200), (x + 50, y), (255, 0, 0), 2)
+        self.bgr8_pub.publish(self.bridge.cv2_to_imgmsg(cv_image, encoding))
 
         #TODO use light location to zoom in on traffic light in image
 
@@ -236,9 +259,14 @@ class TLDetector(object):
         # Find the closest visible traffic light (if one exists)
         light_location = None
         if traffic_light_idx >= 0:
-            light_location = np.array(light_positions[traffic_light_idx])
-
-        if light_location is not None:
+            #light_location = np.array(light_positions[traffic_light_idx] + [5.0])
+            #rospy.loginfo('Light location = %s', light_location)
+            item = self.traffic_light_labels[traffic_light_idx]
+            light_location = np.array([item.pose.pose.position.x,
+                                       item.pose.pose.position.y,
+                                       item.pose.pose.position.z])
+            x, y = self.project_to_image_plane(light_location)
+            rospy.loginfo('Light x, y = %f, %f', x, y)
             state = self.get_light_state(light_location)
             return TrafficLightInfo(light_location[0], light_location[1], state)
 
