@@ -196,24 +196,30 @@ class TLDetector(object):
             camera_angle = camera_angle * math.pi / 180.0
             r_camera = tf.transformations.euler_matrix(0, camera_angle, 0)
             # Combine all matrices
-            m = tf.transformations.concatenate_matrices(r_camera, t, r)
+            m = tf.transformations.concatenate_matrices(t, r)
             p = np.append(point_in_world, 1.0)
             tp = m.dot(p)
+            rospy.loginfo("x = %f, y = %f, z = %f", tp[0], tp[1], tp[2])
             # Project
             x = fx * tp[1] / tp[0]
             y = fy * tp[2] / tp[0]
             # Map 2D point to image coordinates
-            x = int((0.5 - x) * image_width)
-            y = int((0.5 - y) * image_height)
+            #x = int((0.5 - x) * image_width)
+            #y = int((0.5 - y) * image_height)
+            x = int(image_width / 2.0 + x * 800.0)
+            y = int(image_height - y * 1000.0)
+            distance = tp[0]
+            rospy.loginfo("x = %d, y = %d", x, y)
 
         except (tf.Exception, tf.LookupException, tf.ConnectivityException):
             x = 0
             y = 0
+            distance = 0
             rospy.logerr("Failed to find camera to map transform")
 
         #TODO Use tranform and rotation to calculate 2D position of light in image
 
-        return (x, y)
+        return (x, y, distance)
 
     def get_light_state(self, light_location):
         """Determines the current color of the traffic light
@@ -232,8 +238,9 @@ class TLDetector(object):
         encoding = 'rgb8'
         self.camera_image.encoding = encoding
         cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, encoding)
-        x, y = self.project_to_image_plane(light_location)
-        cv2.rectangle(cv_image, (x - 50, y - 200), (x + 50, y), (255, 0, 0), 2)
+        x, y, distance = self.project_to_image_plane(light_location)
+        box_size = int(30.0 / distance * 100.0) if distance != 0 else 0
+        cv2.rectangle(cv_image, (x - box_size, y - box_size), (x + box_size, y + box_size), (255, 0, 0), 2)
         self.bgr8_pub.publish(self.bridge.cv2_to_imgmsg(cv_image, encoding))
 
         #TODO use light location to zoom in on traffic light in image
@@ -265,7 +272,7 @@ class TLDetector(object):
             light_location = np.array([item.pose.pose.position.x,
                                        item.pose.pose.position.y,
                                        item.pose.pose.position.z])
-            x, y = self.project_to_image_plane(light_location)
+            x, y, distance = self.project_to_image_plane(light_location)
             rospy.loginfo('Light x, y = %f, %f', x, y)
             state = self.get_light_state(light_location)
             return TrafficLightInfo(light_location[0], light_location[1], state)
