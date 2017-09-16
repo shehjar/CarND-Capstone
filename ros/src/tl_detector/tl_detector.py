@@ -16,25 +16,6 @@ import yaml
 
 STATE_COUNT_THRESHOLD = 3
 
-#set the color thresh in HSV space
-#for red, it can be in two ranges 1 and 2
-lower_red_1 = np.array([0,200,200])
-upper_red_1 = np.array([10,255,255])
-
-lower_red_2 = np.array([170,200,200])
-upper_red_2 = np.array([180,200,200])
-
-RED_LIGHT_THRESHOLD = 20
-#for yellow, only one range
-lower_yellow = np.array([25,200,200])
-upper_yellow = np.array([35,255,255])
-
-YELLOW_LIGHT_THRESHOLD = 20
-
-#for green, only one range
-lower_green = np.array([60,200,200])
-upper_green = np.array([70,255,255])
-GREEN_LIGHT_THRESHOLD = 20
 
 class TrafficLightInfo:
     def __init__(self, x, y, state):
@@ -105,8 +86,8 @@ class TLDetector(object):
         # process_traffic_lights() - use detection
         # process_traffic_lights_test() - use info from /vehicle/traffic_lights topic
         #
-        self.process_traffic_lights()
-        tl_info = self.process_traffic_lights_test()
+        tl_info = self.process_traffic_lights()
+        #tl_info = self.process_traffic_lights_test()
         '''
         Publish upcoming red lights at camera frequency.
         Each predicted state has to occur `STATE_COUNT_THRESHOLD` number
@@ -185,31 +166,32 @@ class TLDetector(object):
         trans = None
         try:
             now = rospy.Time.now()
-            # Compensate for delay
-            past = now - rospy.Duration(.5)
+            # Compensate for latency in camera image
+            past = now - rospy.Duration(0.1)
             self.listener.waitForTransform("/base_link", "/world", now, rospy.Duration(1.0))
             (trans, rot) = self.listener.lookupTransform("/base_link", "/world", past)
             t = tf.transformations.translation_matrix(trans)
             r = tf.transformations.quaternion_matrix(rot)
             # Car camera points slightly up
-            camera_angle = 15.0
-            camera_angle = camera_angle * math.pi / 180.0
+            camera_angle = math.radians(10)
             r_camera = tf.transformations.euler_matrix(0, camera_angle, 0)
+            # Camera seems to be a bit off to the side
+            t_camera = tf.transformations.translation_matrix((0, 0.5, 0))
             # Combine all matrices
-            m = tf.transformations.concatenate_matrices(t, r)
+            m = tf.transformations.concatenate_matrices(r_camera, t_camera, t, r)
+            # Make coordinate homogenous
             p = np.append(point_in_world, 1.0)
+            # Transform the world point to camera coordinates
             tp = m.dot(p)
-            rospy.loginfo("x = %f, y = %f, z = %f", tp[0], tp[1], tp[2])
-            # Project
-            x = fx * tp[1] / tp[0]
-            y = fy * tp[2] / tp[0]
-            # Map 2D point to image coordinates
-            #x = int((0.5 - x) * image_width)
-            #y = int((0.5 - y) * image_height)
-            x = int(image_width / 2.0 + x * 800.0)
-            y = int(image_height - y * 1000.0)
+            # Project point to image plane
+            # Note: the "correction" multipliers are tweaked by hand
+            x = 3.5 * fx * tp[1] / tp[0]
+            y = 2 * fy * tp[2] / tp[0]
+            # Map camera image point to pixel coordinates
+            x = int((0.5 - x) * image_width)
+            y = int((0.5 - y) * image_height)
+            # X-coordinate is the distance to the TL
             distance = tp[0]
-            rospy.loginfo("x = %d, y = %d", x, y)
 
         except (tf.Exception, tf.LookupException, tf.ConnectivityException):
             x = 0
@@ -238,9 +220,15 @@ class TLDetector(object):
         encoding = 'rgb8'
         self.camera_image.encoding = encoding
         cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, encoding)
+        # Add one meter to the height to get the projection on the
+        # center of the light
+        light_location[2] += 1.0
         x, y, distance = self.project_to_image_plane(light_location)
-        box_size = int(30.0 / distance * 100.0) if distance != 0 else 0
-        cv2.rectangle(cv_image, (x - box_size, y - box_size), (x + box_size, y + box_size), (255, 0, 0), 2)
+        box_size = int(30.0 / distance * 120.0) if distance != 0 else 0
+        cv2.rectangle(cv_image,
+                      (x - box_size, y - box_size),
+                      (x + box_size, y + box_size),
+                      (255, 0, 0), 2)
         self.bgr8_pub.publish(self.bridge.cv2_to_imgmsg(cv_image, encoding))
 
         #TODO use light location to zoom in on traffic light in image
@@ -266,14 +254,10 @@ class TLDetector(object):
         # Find the closest visible traffic light (if one exists)
         light_location = None
         if traffic_light_idx >= 0:
-            #light_location = np.array(light_positions[traffic_light_idx] + [5.0])
-            #rospy.loginfo('Light location = %s', light_location)
             item = self.traffic_light_labels[traffic_light_idx]
             light_location = np.array([item.pose.pose.position.x,
                                        item.pose.pose.position.y,
                                        item.pose.pose.position.z])
-            x, y, distance = self.project_to_image_plane(light_location)
-            rospy.loginfo('Light x, y = %f, %f', x, y)
             state = self.get_light_state(light_location)
             return TrafficLightInfo(light_location[0], light_location[1], state)
 
