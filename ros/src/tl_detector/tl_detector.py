@@ -31,7 +31,11 @@ class TLDetector(object):
         self.pose = None
         self.waypoints_msg = None
         self.camera_image = None
-        self.traffic_light_labels = []
+        self.traffic_light_labels = None
+        self.saved_tl_info = TrafficLightInfo(0, 0, TrafficLight.UNKNOWN)
+        self.state_count = 0
+
+        self.is_simulator = rospy.get_param('/simulator', 0)
 
         sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
         #sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
@@ -57,9 +61,6 @@ class TLDetector(object):
         self.light_classifier = TLClassifier()
         self.listener = tf.TransformListener()
 
-        self.saved_tl_info = TrafficLightInfo(0, 0, TrafficLight.UNKNOWN)
-        self.state_count = 0
-        self.traffic_light_labels = None
 
         rospy.spin()
 
@@ -103,9 +104,9 @@ class TLDetector(object):
             tl_info = self.saved_tl_info
         self.state_count += 1
 
-	# publish TL info
-	tl = TrafficLight()
-	tl.state = tl_info.state
+        # publish TL info
+        tl = TrafficLight()
+        tl.state = tl_info.state
         tl.pose.pose.position.x = tl_info.x
         tl.pose.pose.position.y = tl_info.y
         tl.pose.pose.position.z = 0
@@ -121,7 +122,6 @@ class TLDetector(object):
             int: index of the closest traffic light
 
         """
-        #TODO implement
         q = pose.orientation
         _, _, yaw = tf.transformations.euler_from_quaternion((q.x, q.y, q.z, q.w))
         limit_angle = math.pi / 2
@@ -162,44 +162,49 @@ class TLDetector(object):
         image_width = self.config['camera_info']['image_width']
         image_height = self.config['camera_info']['image_height']
 
-        # get transform between pose of camera and world frame
-        trans = None
-        try:
-            now = rospy.Time.now()
-            # Compensate for latency in camera image
-            past = now - rospy.Duration(0.1)
-            self.listener.waitForTransform("/base_link", "/world", now, rospy.Duration(1.0))
-            (trans, rot) = self.listener.lookupTransform("/base_link", "/world", past)
-            t = tf.transformations.translation_matrix(trans)
-            r = tf.transformations.quaternion_matrix(rot)
-            # Car camera points slightly up
-            camera_angle = math.radians(10)
-            r_camera = tf.transformations.euler_matrix(0, camera_angle, 0)
-            # Camera seems to be a bit off to the side
-            t_camera = tf.transformations.translation_matrix((0, 0.5, 0))
-            # Combine all matrices
-            m = tf.transformations.concatenate_matrices(r_camera, t_camera, t, r)
-            # Make coordinate homogenous
-            p = np.append(point_in_world, 1.0)
-            # Transform the world point to camera coordinates
-            tp = m.dot(p)
-            # Project point to image plane
-            # Note: the "correction" multipliers are tweaked by hand
-            x = 3.5 * fx * tp[1] / tp[0]
-            y = 2 * fy * tp[2] / tp[0]
-            # Map camera image point to pixel coordinates
-            x = int((0.5 - x) * image_width)
-            y = int((0.5 - y) * image_height)
-            # X-coordinate is the distance to the TL
-            distance = tp[0]
+        if self.is_simulator:
+            # Use tranform and rotation to calculate 2D position of light in image
+            # get transform between pose of camera and world frame
+            trans = None
+            try:
+                now = rospy.Time.now()
+                # Compensate for latency in camera image
+                past = now - rospy.Duration(0.1)
+                self.listener.waitForTransform("/base_link", "/world", now, rospy.Duration(1.0))
+                (trans, rot) = self.listener.lookupTransform("/base_link", "/world", past)
+                t = tf.transformations.translation_matrix(trans)
+                r = tf.transformations.quaternion_matrix(rot)
+                # Car camera points slightly up
+                camera_angle = math.radians(10)
+                r_camera = tf.transformations.euler_matrix(0, camera_angle, 0)
+                # Camera seems to be a bit off to the side
+                t_camera = tf.transformations.translation_matrix((0, 0.5, 0))
+                # Combine all matrices
+                m = tf.transformations.concatenate_matrices(r_camera, t_camera, t, r)
+                # Make coordinate homogenous
+                p = np.append(point_in_world, 1.0)
+                # Transform the world point to camera coordinates
+                tp = m.dot(p)
+                # Project point to image plane
+                # Note: the "correction" multipliers are tweaked by hand
+                x = 3.5 * fx * tp[1] / tp[0]
+                y = 2 * fy * tp[2] / tp[0]
+                # Map camera image point to pixel coordinates
+                x = int((0.5 - x) * image_width)
+                y = int((0.5 - y) * image_height)
+                # X-coordinate is the distance to the TL
+                distance = tp[0]
 
-        except (tf.Exception, tf.LookupException, tf.ConnectivityException):
+            except (tf.Exception, tf.LookupException, tf.ConnectivityException):
+                x = 0
+                y = 0
+                distance = 0
+                rospy.logerr("Failed to find camera to map transform")
+        else:
+            # site launch, don't use transform
             x = 0
             y = 0
             distance = 0
-            rospy.logerr("Failed to find camera to map transform")
-
-        #TODO Use tranform and rotation to calculate 2D position of light in image
 
         return (x, y, distance)
 
@@ -225,6 +230,8 @@ class TLDetector(object):
         light_location[2] += 1.0
         x, y, distance = self.project_to_image_plane(light_location)
         box_size = int(30.0 / distance * 120.0) if distance != 0 else 0
+
+        # publish bounding box for debugging
         cv2.rectangle(cv_image,
                       (x - box_size, y - box_size),
                       (x + box_size, y + box_size),
@@ -247,7 +254,7 @@ class TLDetector(object):
         """
         light_positions = self.config['light_positions']
         if self.pose is None:
-            return
+            return TrafficLightInfo(0, 0, TrafficLight.UNKNOWN)
 
         traffic_light_idx = self.get_closest_traffic_light(self.pose.pose)
 
