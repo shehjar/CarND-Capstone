@@ -167,20 +167,31 @@ class TLDetector(object):
             # get transform between pose of camera and world frame
             trans = None
             try:
-                now = rospy.Time.now()
-                # Compensate for latency in camera image
-                past = now - rospy.Duration(0.1)
-                self.listener.waitForTransform("/base_link", "/world", now, rospy.Duration(1.0))
-                (trans, rot) = self.listener.lookupTransform("/base_link", "/world", past)
-                t = tf.transformations.translation_matrix(trans)
-                r = tf.transformations.quaternion_matrix(rot)
+                # now = rospy.Time.now()
+                # # Compensate for latency in camera image
+                # past = now - rospy.Duration(0.1)
+                # self.listener.waitForTransform("/base_link", "/world", now, rospy.Duration(1.0))
+                # (trans, rot) = self.listener.lookupTransform("/base_link", "/world", past)
+                # t = tf.transformations.translation_matrix(trans)
+                # r = tf.transformations.quaternion_matrix(rot)
+                # print('t = ', t)
+                # print('r = ', r)
+
+                pose = self.pose.pose
+                p = pose.position
+                t = tf.transformations.translation_matrix((-p.x, -p.y, -p.z))
+                q = pose.orientation
+                r = tf.transformations.quaternion_matrix((q.x, q.y, q.z, -q.w))
+                # print('t = ', t)
+                # print('r = ', r)
+                
                 # Car camera points slightly up
                 camera_angle = math.radians(10)
                 r_camera = tf.transformations.euler_matrix(0, camera_angle, 0)
                 # Camera seems to be a bit off to the side
                 t_camera = tf.transformations.translation_matrix((0, 0.5, 0))
                 # Combine all matrices
-                m = tf.transformations.concatenate_matrices(r_camera, t_camera, t, r)
+                m = tf.transformations.concatenate_matrices(r_camera, t_camera, r, t)
                 # Make coordinate homogenous
                 p = np.append(point_in_world, 1.0)
                 # Transform the world point to camera coordinates
