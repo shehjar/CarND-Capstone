@@ -162,61 +162,53 @@ class TLDetector(object):
         image_width = self.config['camera_info']['image_width']
         image_height = self.config['camera_info']['image_height']
 
+        pose = self.pose.pose
+        p = pose.position
+        t = tf.transformations.translation_matrix((-p.x, -p.y, -p.z))
+        q = pose.orientation
+        r = tf.transformations.quaternion_matrix((q.x, q.y, q.z, -q.w))
+
         if self.is_simulator:
-            # Use tranform and rotation to calculate 2D position of light in image
-            # get transform between pose of camera and world frame
-            trans = None
-            try:
-                # now = rospy.Time.now()
-                # # Compensate for latency in camera image
-                # past = now - rospy.Duration(0.1)
-                # self.listener.waitForTransform("/base_link", "/world", now, rospy.Duration(1.0))
-                # (trans, rot) = self.listener.lookupTransform("/base_link", "/world", past)
-                # t = tf.transformations.translation_matrix(trans)
-                # r = tf.transformations.quaternion_matrix(rot)
-                # print('t = ', t)
-                # print('r = ', r)
-
-                pose = self.pose.pose
-                p = pose.position
-                t = tf.transformations.translation_matrix((-p.x, -p.y, -p.z))
-                q = pose.orientation
-                r = tf.transformations.quaternion_matrix((q.x, q.y, q.z, -q.w))
-                # print('t = ', t)
-                # print('r = ', r)
-                
-                # Car camera points slightly up
-                camera_angle = math.radians(10)
-                r_camera = tf.transformations.euler_matrix(0, camera_angle, 0)
-                # Camera seems to be a bit off to the side
-                t_camera = tf.transformations.translation_matrix((0, 0.5, 0))
-                # Combine all matrices
-                m = tf.transformations.concatenate_matrices(r_camera, t_camera, r, t)
-                # Make coordinate homogenous
-                p = np.append(point_in_world, 1.0)
-                # Transform the world point to camera coordinates
-                tp = m.dot(p)
-                # Project point to image plane
-                # Note: the "correction" multipliers are tweaked by hand
-                x = 3.5 * fx * tp[1] / tp[0]
-                y = 2 * fy * tp[2] / tp[0]
-                # Map camera image point to pixel coordinates
-                x = int((0.5 - x) * image_width)
-                y = int((0.5 - y) * image_height)
-                # X-coordinate is the distance to the TL
-                distance = tp[0]
-
-            except (tf.Exception, tf.LookupException, tf.ConnectivityException):
-                x = 0
-                y = 0
-                distance = 0
-                rospy.logerr("Failed to find camera to map transform")
+            # Car camera points slightly up
+            camera_angle = math.radians(10)
+            r_camera = tf.transformations.euler_matrix(0, camera_angle, 0)
+            # Camera seems to be a bit off to the side
+            t_camera = tf.transformations.translation_matrix((0, 0.5, 0))
+            # Combine all matrices
+            m = tf.transformations.concatenate_matrices(r_camera, t_camera, r, t)
+            # Make coordinate homogenous
+            p = np.append(point_in_world, 1.0)
+            # Transform the world point to camera coordinates
+            tp = m.dot(p)
+            # Project point to image plane
+            # Note: the "correction" multipliers are tweaked by hand
+            x = 3.5 * tp[1] / tp[0]
+            y = 3.5 * tp[2] / tp[0]
+            # Map camera image point to pixel coordinates
+            x = int((0.5 - x) * image_width)
+            y = int((0.5 - y) * image_height)
+            # X-coordinate is the distance to the TL
+            distance = tp[0]
         else:
-            # site launch, don't use transform
-            x = 0
-            y = 0
-            distance = 0
-
+            # Carla camera points slight to right
+            camera_angle = math.radians(2.5)
+            r_camera = tf.transformations.euler_matrix(0, 0, camera_angle)
+            # Combine all matrices
+            m = tf.transformations.concatenate_matrices(r_camera, r, t)
+            # Make coordinate homogenous
+            p = np.append(point_in_world, 1.0)
+            # Transform the world point to camera coordinates
+            tp = m.dot(p)
+            # Project point to image plane
+            # Note: the "correction" multipliers are tweaked by hand
+            x = 1.25 * tp[1] / tp[0]
+            y = 1.25 * tp[2] / tp[0]
+            # Map camera image point to pixel coordinates
+            x = int((1 - x) * image_width)
+            y = int((1 - y) * image_height)
+            # X-coordinate is the distance to the TL
+            distance = tp[0]
+            
         return (x, y, distance)
 
     def get_light_state(self, light_location):
@@ -236,11 +228,15 @@ class TLDetector(object):
         encoding = 'rgb8'
         self.camera_image.encoding = encoding
         cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, encoding)
-        # Add one meter to the height to get the projection on the
-        # center of the light
-        light_location[2] += 1.0
+        # Tweak light height to get the projection closer
+        if self.is_simulator:
+            light_location[2] += 1.0
+            box_dim = 30.0
+        else:
+            light_location[2] -= 0.5
+            box_dim = 15.0
         x, y, distance = self.project_to_image_plane(light_location)
-        box_size = int(30.0 / distance * 120.0) if distance != 0 else 0
+        box_size = int(box_dim / distance * 120.0) if distance != 0 else 0
 
         # publish bounding box for debugging
         cv2.rectangle(cv_image,
