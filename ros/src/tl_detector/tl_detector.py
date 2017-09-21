@@ -41,7 +41,7 @@ class TLDetector(object):
         #sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
 
         '''
-        /vehicle/traffic_lights provides you with the location of the traffic light in 3D map space and 
+        /vehicle/traffic_lights provides you with the location of the traffic light in 3D map space and
         helps you acquire an accurate ground truth data source for the traffic light
         classifier by sending the current color state of all traffic lights in the
         simulator. When testing on the vehicle, the color state will not be available. You'll need to
@@ -75,7 +75,7 @@ class TLDetector(object):
 
     def image_cb(self, msg):
         """Identifies red lights in the incoming camera image and publishes the index
-            of the waypoint closest to the red light to /traffic_waypoint
+            of the waypoint closest to the red light's stop line to /traffic_waypoint
 
         Args:
             msg (Image): image from car-mounted camera
@@ -208,7 +208,7 @@ class TLDetector(object):
             y = int((1 - y) * image_height)
             # X-coordinate is the distance to the TL
             distance = tp[0]
-            
+
         return (x, y, distance)
 
     def get_light_state(self, light_location):
@@ -255,11 +255,11 @@ class TLDetector(object):
             location and color
 
         Returns:
-            int: index of waypoint closes to the upcoming traffic light (-1 if none exists)
+            int: index of waypoint closes to the upcoming stop line for a traffic light (-1 if none exists)
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
-        light_positions = self.config['light_positions']
+        stop_line_positions = self.config['stop_line_positions']
         if self.pose is None:
             return TrafficLightInfo(0, 0, TrafficLight.UNKNOWN)
 
