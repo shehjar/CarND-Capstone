@@ -128,7 +128,7 @@ class TLDetector(object):
         max_distance = 100
         min_distance = float("inf")
         traffic_light_idx = -1
-        for idx, (x, y) in enumerate(self.config['light_positions']):
+        for idx, (x, y) in enumerate(self.config['stop_line_positions']):
             heading = math.atan2((y - pose.position.y), (x - pose.position.x))
             if abs(yaw - heading) < limit_angle:
                 distance = math.sqrt((x - pose.position.x) ** 2 + (y - pose.position.y) ** 2)
@@ -170,8 +170,8 @@ class TLDetector(object):
 
         if self.is_simulator:
             # Car camera points slightly up
-            camera_angle = math.radians(10)
-            r_camera = tf.transformations.euler_matrix(0, camera_angle, 0)
+            camera_pitch_angle = math.radians(10)
+            r_camera = tf.transformations.euler_matrix(0, camera_pitch_angle, 0)
             # Camera seems to be a bit off to the side
             t_camera = tf.transformations.translation_matrix((0, 0.5, 0))
             # Combine all matrices
@@ -190,19 +190,23 @@ class TLDetector(object):
             # X-coordinate is the distance to the TL
             distance = tp[0]
         else:
-            # Carla camera points slight to right
-            camera_angle = math.radians(2.5)
-            r_camera = tf.transformations.euler_matrix(0, 0, camera_angle)
+            # Carla camera points slight to right and up
+            camera_yaw_angle = math.radians(1)
+            camera_pitch_angle = math.radians(7)
+            # Camera seems to be a bit off to the side also
+            t_camera = tf.transformations.translation_matrix((0, -0.3, 0))
+            r_camera = tf.transformations.euler_matrix(0, camera_pitch_angle,
+                                                       camera_yaw_angle)
             # Combine all matrices
-            m = tf.transformations.concatenate_matrices(r_camera, r, t)
+            m = tf.transformations.concatenate_matrices(r_camera, t_camera, r, t)
             # Make coordinate homogenous
             p = np.append(point_in_world, 1.0)
             # Transform the world point to camera coordinates
             tp = m.dot(p)
             # Project point to image plane
             # Note: the "correction" multipliers are tweaked by hand
-            x = 1.25 * tp[1] / tp[0]
-            y = 1.25 * tp[2] / tp[0]
+            x = 1.75 * tp[1] / tp[0]
+            y = 1.75 * tp[2] / tp[0]
             # Map camera image point to pixel coordinates
             x = int((1 - x) * image_width)
             y = int((1 - y) * image_height)
@@ -233,7 +237,7 @@ class TLDetector(object):
             light_location[2] += 1.0
             box_dim = 30.0
         else:
-            light_location[2] -= 0.5
+            light_location[2] -= 0
             box_dim = 15.0
         x, y, distance = self.project_to_image_plane(light_location)
         box_size = int(box_dim / distance * 120.0) if distance != 0 else 0
