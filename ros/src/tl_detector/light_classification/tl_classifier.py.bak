@@ -1,5 +1,4 @@
 from styx_msgs.msg import TrafficLight
-import rospy
 import numpy as np
 import cv2
 
@@ -42,22 +41,34 @@ class TLClassifier(object):
         #TODO implement light color prediction
 
         #change color to hsv space
-        hsv= cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+        hsv= cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+	print("in classifier")
         #get mask
         red_mask_1 = cv2.inRange(hsv, lower_red_1, upper_red_1)
         red_mask_2 = cv2.inRange(hsv, lower_red_2, upper_red_2)
         yellow_mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
         green_mask = cv2.inRange(hsv, lower_green, upper_green)
         if ((np.sum(red_mask_1)+np.sum(red_mask_2)) > RED_LIGHT_THRESHOLD):
-	    #detect red 
-            rospy.loginfo("red light ahead")
+            #detect red
+            #red_Image_1 = cv2.bitwise_and(image, image, mask=red_mask_1)
+            #red_Image_2 = cv2.bitwise_and(image, image, mask=red_mask_2)
+            #red_Image = red_Image_1 + red_Image_2
+	    # WriteToFileName = "../../../imgs/Camera/"+str(self.ImageID)+"_red.png"
+	    print("red light")
 	    return TrafficLight.RED
+            #cv2.imwrite(WriteToFileName, red_Image)
         elif (np.sum(yellow_mask)>YELLOW_LIGHT_THRESHOLD):
             #detect yellow
-            rospy.loginfo("yellow light ahead")
+            #yellow_Image = cv2.bitwise_and(image, image, mask=yellow_mask)
+            #WriteToFileName = "../../../imgs/Camera/"+str(self.ImageID)+"_yellow.png"
+            #cv2.imwrite(WriteToFileName, yellow_Image)
+	    print("yellow light")
 	    return TrafficLight.YELLOW
         elif (np.sum(green_mask)>GREEN_LIGHT_THRESHOLD):
             #detect green
-            rospy.loginfo("green light ahead")
+            #green_Image = cv2.bitwise_and(image,image, mask=green_mask)
+            #WriteToFileName = "../../../imgs/Camera/"+str(self.ImageID)+"_green.png"
+            #cv2.imwrite(WriteToFileName, green_Image)
+	    print("green light")
 	    return TrafficLight.GREEN
         return TrafficLight.UNKNOWN
