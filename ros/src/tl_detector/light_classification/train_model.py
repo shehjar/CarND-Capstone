@@ -55,7 +55,7 @@ def LeNet5(x, num_classes, keep_prob, mu=0, sigma=0.01):
     #fc3_W = tf.Variable(tf.truncated_normal([100,num_classes], mean= mu, stddev= sigma))
     #fc3_b = tf.Variable(tf.zeros(num_classes))
     #fc3 = tf.add(tf.matmul(fc2,fc3_W),fc3_b)
-    fc3 = tf.layers.dense(fc2, num_classes,kernel_initializer=tf.truncated_normal_initializer(stddev=sigma))
+    fc3 = tf.layers.dense(fc2, num_classes,kernel_initializer=tf.truncated_normal_initializer(stddev=sigma), name='logits')
     # Activation
     #logits = tf.nn.softmax(fc3)
     logits = fc3
@@ -96,9 +96,9 @@ def run():
     data = preprocessing.read_data(datadir)
     train_data, test_data = preprocessing.test_train_split(data, 0.2)
 
-    input_image = tf.placeholder(tf.float32,(None, image_shape[0], image_shape[1], 3))
+    input_image = tf.placeholder(tf.float32,(None, image_shape[0], image_shape[1], 3), name='input_image')
     y_label = tf.placeholder(tf.int64, (None))
-    prob = tf.placeholder(tf.float32)
+    prob = tf.placeholder(tf.float32, name='prob')
     learning_rate_ph = tf.placeholder("float")
     logits = LeNet5(input_image, num_classes, prob)
     train_op, cross_entropy_loss = optimize(logits, y_label, learning_rate_ph, num_classes)
