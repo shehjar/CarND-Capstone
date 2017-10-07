@@ -34,6 +34,7 @@ class TLDetector(object):
         self.traffic_light_labels = None
         self.saved_tl_info = TrafficLightInfo(0, 0, TrafficLight.UNKNOWN)
         self.state_count = 0
+        self.light_classifier = TLClassifier()
 
         self.is_simulator = rospy.get_param('/simulator', 0)
 
@@ -58,7 +59,6 @@ class TLDetector(object):
         self.bgr8_pub = rospy.Publisher('/image_color_bgr8', Image, queue_size=1)
 
         self.bridge = CvBridge()
-        self.light_classifier = TLClassifier()
         self.listener = tf.TransformListener()
 
 
