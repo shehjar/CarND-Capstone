@@ -58,28 +58,38 @@ class TLClassifier(object):
 
         
         # Use the TF classifier
+        # Resize and normalize the image
         image = cv2.resize(image, (64, 64))
-        predictions = self.sess.run(self.pred_class, feed_dict={self.input_image: [image],
-                                                                self.keep_prob: 1.0})
-        print(predictions)
-
-        #change color to hsv space
-        hsv= cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
-        #get mask
-        red_mask_1 = cv2.inRange(hsv, lower_red_1, upper_red_1)
-        red_mask_2 = cv2.inRange(hsv, lower_red_2, upper_red_2)
-        yellow_mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
-        green_mask = cv2.inRange(hsv, lower_green, upper_green)
-        if ((np.sum(red_mask_1)+np.sum(red_mask_2)) > RED_LIGHT_THRESHOLD):
-	    #detect red 
+        image = image.astype('float')
+        image = image / 255 - 0.5
+        prediction = self.sess.run(self.pred_class,
+                                   feed_dict={self.input_image: [image],
+                                              self.keep_prob: 1.0})[0]
+        print(prediction)
+        if prediction == 0:
             rospy.loginfo("red light ahead")
-	    return TrafficLight.RED
-        elif (np.sum(yellow_mask)>YELLOW_LIGHT_THRESHOLD):
-            #detect yellow
-            rospy.loginfo("yellow light ahead")
-	    return TrafficLight.YELLOW
-        elif (np.sum(green_mask)>GREEN_LIGHT_THRESHOLD):
-            #detect green
+            return TrafficLight.RED
+        else:
             rospy.loginfo("green light ahead")
-	    return TrafficLight.GREEN
-        return TrafficLight.UNKNOWN
+            return TrafficLight.GREEN
+        
+        # #change color to hsv space
+        # hsv= cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+        # #get mask
+        # red_mask_1 = cv2.inRange(hsv, lower_red_1, upper_red_1)
+        # red_mask_2 = cv2.inRange(hsv, lower_red_2, upper_red_2)
+        # yellow_mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
+        # green_mask = cv2.inRange(hsv, lower_green, upper_green)
+        # if ((np.sum(red_mask_1)+np.sum(red_mask_2)) > RED_LIGHT_THRESHOLD):
+	#     #detect red 
+        #     rospy.loginfo("red light ahead")
+	#     return TrafficLight.RED
+        # elif (np.sum(yellow_mask)>YELLOW_LIGHT_THRESHOLD):
+        #     #detect yellow
+        #     rospy.loginfo("yellow light ahead")
+	#     return TrafficLight.YELLOW
+        # elif (np.sum(green_mask)>GREEN_LIGHT_THRESHOLD):
+        #     #detect green
+        #     rospy.loginfo("green light ahead")
+	#     return TrafficLight.GREEN
+        # return TrafficLight.UNKNOWN
