@@ -37,6 +37,10 @@ class TLClassifier(object):
         saver = tf.train.import_meta_graph(meta_path)
         rospy.loginfo('Loading TL classifier checkpoint from %s', model_dir)
         saver.restore(self.sess, tf.train.latest_checkpoint(model_dir))
+        self.input_image = tf.placeholder(tf.float32, (None, 64, 64, 3))
+        self.prob = tf.placeholder(tf.float32)
+        self.logits = LeNet5(self.input_image, 2, self.prob)
+        self.sess.run(tf.global_variables_initializer())
 
     def get_classification(self, image):
         """Determines the color of the traffic light in the image
@@ -50,12 +54,12 @@ class TLClassifier(object):
         """
         #TODO implement light color prediction
 
-        if 0:
-            # Use the TF classifier
-            input_image = tf.placeholder(tf.float32, (None, 64, 64, 3))
-            prob = tf.placeholder(tf.float32)
-            logits = LeNet5(input_image, 2, prob)
-            self.sess.run(logits, feed_dict={input_image: image, prob: 1})
+        
+        # Use the TF classifier
+        image = cv2.resize(image, (64, 64))
+        predictions = self.sess.run(self.logits, feed_dict={self.input_image: [image],
+                                                            self.prob: 1.0})
+        print(predictions)
 
         #change color to hsv space
         hsv= cv2.cvtColor(image, cv2.COLOR_RGB2HSV)

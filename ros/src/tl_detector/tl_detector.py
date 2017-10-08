@@ -8,6 +8,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from light_classification.tl_classifier import TLClassifier
 import tf
+
 import cv2
 import math
 import numpy as np
@@ -239,21 +240,31 @@ class TLDetector(object):
         else:
             light_location[2] -= 0
             box_dim = 15.0
+        
         x, y, distance = self.project_to_image_plane(light_location)
+        if x < 0 or x > cv_image.shape[1] or y < 0 or y > cv_image.shape[0]:
+            return False
         box_size = int(box_dim / distance * 120.0) if distance != 0 else 0
 
         # publish bounding box for debugging
 	# please do not use traffic light as the bounding box color
-        cv2.rectangle(cv_image,
-                      (x - box_size, y - box_size),
-                      (x + box_size, y + box_size),
-                      (255, 255, 255), 1)
-        self.bgr8_pub.publish(self.bridge.cv2_to_imgmsg(cv_image, encoding))
+        # cv2.rectangle(cv_image,
+        #               (x - box_size, y - box_size),
+        #               (x + box_size, y + box_size),
+        #               (255, 255, 255), 1)
+        # self.bgr8_pub.publish(self.bridge.cv2_to_imgmsg(cv_image, encoding))
 
         #TODO use light location to zoom in on traffic light in image
-
+        cv_image_with_borders = cv2.copyMakeBorder(cv_image,
+                                                   box_size, box_size, box_size, box_size,
+                                                   cv2.BORDER_CONSTANT,
+                                                   value=[0, 0, 0])
+        x1, y1, x2, y2 = x, y, x + 2 * box_size, y + 2 * box_size
+        tl_image = cv_image_with_borders[y1:y2, x1:x2]
+        print(x, y, distance, tl_image.shape)
+        self.bgr8_pub.publish(self.bridge.cv2_to_imgmsg(tl_image, encoding))
         #Get classification
-        return self.light_classifier.get_classification(cv_image)
+        return self.light_classifier.get_classification(tl_image)
 
     def process_traffic_lights(self):
         """Finds closest visible traffic light, if one exists, and determines its
