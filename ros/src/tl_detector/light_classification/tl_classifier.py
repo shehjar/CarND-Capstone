@@ -37,9 +37,11 @@ class TLClassifier(object):
         saver = tf.train.import_meta_graph(meta_path)
         rospy.loginfo('Loading TL classifier checkpoint from %s', model_dir)
         saver.restore(self.sess, tf.train.latest_checkpoint(model_dir))
-        self.input_image = tf.placeholder(tf.float32, (None, 64, 64, 3))
-        self.prob = tf.placeholder(tf.float32)
-        self.logits = LeNet5(self.input_image, 2, self.prob)
+        graph = tf.get_default_graph()
+        #print(graph.get_operations())
+        self.pred_class = graph.get_tensor_by_name('prediction:0')
+        self.input_image = graph.get_tensor_by_name('input:0')
+        self.keep_prob = graph.get_tensor_by_name('Placeholder:0')
         self.sess.run(tf.global_variables_initializer())
 
     def get_classification(self, image):
@@ -57,8 +59,8 @@ class TLClassifier(object):
         
         # Use the TF classifier
         image = cv2.resize(image, (64, 64))
-        predictions = self.sess.run(self.logits, feed_dict={self.input_image: [image],
-                                                            self.prob: 1.0})
+        predictions = self.sess.run(self.pred_class, feed_dict={self.input_image: [image],
+                                                                self.keep_prob: 1.0})
         print(predictions)
 
         #change color to hsv space
