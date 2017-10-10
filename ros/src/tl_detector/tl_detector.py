@@ -240,7 +240,7 @@ class TLDetector(object):
         else:
             light_location[2] -= 0
             box_dim = 15.0
-        
+
         x, y, distance = self.project_to_image_plane(light_location)
         if x < 0 or x > cv_image.shape[1] or y < 0 or y > cv_image.shape[0]:
             return False
