@@ -12,27 +12,27 @@ import tensorflow as tf
 from tensorflow.contrib.layers import flatten
 import preprocessing
 
-def LeNet5(x, num_classes, keep_prob, mu=0, sigma=0.01):
+def LeNet6(x, num_classes, keep_prob, mu=0, sigma=0.01):
     # Layer 1: Convolution: filter size 32
     conv1 = tf.layers.conv2d(x, 32, 7, padding='valid', activation=tf.nn.relu, 
                              kernel_initializer=tf.truncated_normal_initializer(stddev=sigma),
-                             kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+                             kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), name='conv1')
     # Pooling (2,2)
-    pool1 = tf.layers.max_pooling2d(conv1, pool_size=[2, 2], strides=2)
+    pool1 = tf.layers.max_pooling2d(conv1, pool_size=[2, 2], strides=2, name='pool1')
     
     # Layer 2: Convolutional. Output = 10x10x64.
     conv2 = tf.layers.conv2d(pool1, 64, 3, padding='valid', activation=tf.nn.relu, 
                              kernel_initializer=tf.truncated_normal_initializer(stddev=sigma),
-                             kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+                             kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), name='conv2')
     # Maxpooling: (2,2)
-    pool2 = tf.layers.max_pooling2d(conv2, pool_size=[2,2], strides=2)
+    pool2 = tf.layers.max_pooling2d(conv2, pool_size=[2,2], strides=2, name='pool2')
     
     # Layer 3: Convolutional. filter size:128
     conv3 = tf.layers.conv2d(pool2, 128, 3, padding='valid', activation=tf.nn.relu,
                              kernel_initializer=tf.truncated_normal_initializer(stddev=sigma),
-                             kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+                             kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), name='conv3')
     # Pooling (2,2)
-    pool3 = tf.layers.max_pooling2d(conv3, pool_size=[2,2], strides=2)
+    pool3 = tf.layers.max_pooling2d(conv3, pool_size=[2,2], strides=2, name='pool3')
     
     # Flatten. Input = 5x5x64. Output = 1600
     flat = flatten(pool3)
@@ -41,24 +41,27 @@ def LeNet5(x, num_classes, keep_prob, mu=0, sigma=0.01):
 #    fc1_W = tf.Variable(tf.truncated_normal([10816,400], mean= mu, stddev= sigma))
 #    fc1_b = tf.Variable(tf.zeros(400))
 #    fc1 = tf.add(tf.matmul(flat,fc1_W),fc1_b)
-    fc1 = tf.layers.dense(flat, 256, activation=tf.nn.relu,kernel_initializer=tf.truncated_normal_initializer(stddev=sigma))
-    fc1 = tf.nn.dropout(fc1,keep_prob)
+    fc1 = tf.layers.dense(flat, 256, activation=tf.nn.relu,kernel_initializer=tf.truncated_normal_initializer(stddev=sigma),
+                          name='fc1')
+    fc1 = tf.nn.dropout(fc1,keep_prob, name='fc1_drop')
     
     # Layer 4: Fully Connected. Input = 400. Output = 100.
     #fc2_W = tf.Variable(tf.truncated_normal([400,100], mean= mu, stddev= sigma))
     #fc2_b = tf.Variable(tf.zeros(100))
     #fc2 = tf.add(tf.matmul(fc1,fc2_W),fc2_b)
-    fc2 = tf.layers.dense(fc1, 128, activation=tf.nn.relu,kernel_initializer=tf.truncated_normal_initializer(stddev=sigma))
-    fc2 = tf.nn.dropout(fc2, keep_prob)
+    fc2 = tf.layers.dense(fc1, 128, activation=tf.nn.relu,
+                          kernel_initializer=tf.truncated_normal_initializer(stddev=sigma), name='fc2')
+    fc2 = tf.nn.dropout(fc2, keep_prob, name='fc2_drop')
     
     # Layer 5: Fully Connected. Input = 100. Output = 43.
     #fc3_W = tf.Variable(tf.truncated_normal([100,num_classes], mean= mu, stddev= sigma))
     #fc3_b = tf.Variable(tf.zeros(num_classes))
     #fc3 = tf.add(tf.matmul(fc2,fc3_W),fc3_b)
-    fc3 = tf.layers.dense(fc2, num_classes,kernel_initializer=tf.truncated_normal_initializer(stddev=sigma), name='logits')
+    logits = tf.layers.dense(fc2, num_classes,
+                             kernel_initializer=tf.truncated_normal_initializer(stddev=sigma), name='logits')
     # Activation
     #logits = tf.nn.softmax(fc3)
-    logits = fc3
+    #logits = fc3
     return logits
 
 def optimize(logits, correct_label, learning_rate, num_classes):
@@ -75,9 +78,9 @@ def optimize(logits, correct_label, learning_rate, num_classes):
     #labels = tf.reshape(correct_label, (-1, num_classes))
     #pred = tf.argmax(tf.nn.softmax(logits),axis=1)
     one_hot_y = tf.one_hot(correct_label, num_classes)
-    cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=one_hot_y))
-    opt = tf.train.AdamOptimizer(learning_rate=learning_rate)
-    train_op = opt.minimize(cross_entropy_loss)
+    cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=one_hot_y), name='loss')
+    opt = tf.train.AdamOptimizer(learning_rate=learning_rate, name='optimizer')
+    train_op = opt.minimize(cross_entropy_loss, name='operation')
     
     return train_op, cross_entropy_loss
 
@@ -95,17 +98,17 @@ def run():
     # Get data
     data = preprocessing.read_data(datadir)
     train_data, test_data = preprocessing.test_train_split(data, 0.2)
-
+    tf.get_default_graph()
     input_image = tf.placeholder(tf.float32,(None, image_shape[0], image_shape[1], 3), name='input_image')
-    y_label = tf.placeholder(tf.int64, (None))
+    y_label = tf.placeholder(tf.int64, (None), name='label')
     prob = tf.placeholder(tf.float32, name='prob')
     learning_rate_ph = tf.placeholder("float")
-    logits = LeNet5(input_image, num_classes, prob)
+    logits = LeNet6(input_image, num_classes, prob)
     train_op, cross_entropy_loss = optimize(logits, y_label, learning_rate_ph, num_classes)
-    pred_class = tf.argmax(tf.nn.softmax(logits), axis=1)
+    pred_class = tf.argmax(tf.nn.softmax(logits), axis=1, name='pred')
     correct_prediction = tf.equal(pred_class, y_label)
     float_cast_pred = tf.cast(correct_prediction,tf.float32)
-    accuracy = tf.reduce_mean(float_cast_pred)
+    accuracy = tf.reduce_mean(float_cast_pred, name='accuracy')
     #saver = tf.train.Saver()
     
     with tf.Session() as sess:

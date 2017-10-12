@@ -4,7 +4,6 @@ import rospy
 import numpy as np
 import cv2
 import tensorflow as tf
-from train_model import LeNet5
 
 #set the color thresh in HSV space
 #for red, it can be in two ranges 1 and 2
@@ -39,10 +38,10 @@ class TLClassifier(object):
         saver.restore(self.sess, tf.train.latest_checkpoint(model_dir))
         graph = tf.get_default_graph()
         #print(graph.get_operations())
-        self.pred_class = graph.get_tensor_by_name('prediction:0')
-        self.input_image = graph.get_tensor_by_name('input:0')
-        self.keep_prob = graph.get_tensor_by_name('Placeholder:0')
-        self.sess.run(tf.global_variables_initializer())
+        self.pred_class = graph.get_tensor_by_name('pred:0')
+        self.input_image = graph.get_tensor_by_name('input_image:0')
+        self.keep_prob = graph.get_tensor_by_name('prob:0')
+        #self.sess.run(tf.global_variables_initializer())
 
     def get_classification(self, image):
         """Determines the color of the traffic light in the image
@@ -59,7 +58,7 @@ class TLClassifier(object):
         
         # Use the TF classifier
         # Resize and normalize the image
-        image = cv2.resize(image, (64, 64))
+        image = cv2.resize(image, (64, 64), interpolation=cv2.INTER_AREA)
         image = image.astype('float')
         image = image / 255 - 0.5
         prediction = self.sess.run(self.pred_class,
