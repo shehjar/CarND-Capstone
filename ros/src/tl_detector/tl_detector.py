@@ -15,7 +15,7 @@ import numpy as np
 import yaml
 
 
-STATE_COUNT_THRESHOLD = 3
+STATE_COUNT_THRESHOLD = 1
 
 
 class TrafficLightInfo:
@@ -158,8 +158,8 @@ class TLDetector(object):
 
         """
 
-        fx = self.config['camera_info']['focal_length_x']
-        fy = self.config['camera_info']['focal_length_y']
+        #fx = self.config['camera_info']['focal_length_x']
+        #fy = self.config['camera_info']['focal_length_y']
         image_width = self.config['camera_info']['image_width']
         image_height = self.config['camera_info']['image_height']
 
@@ -292,7 +292,11 @@ class TLDetector(object):
                                        item.pose.pose.position.y,
                                        item.pose.pose.position.z])
             state = self.get_light_state(light_location)
-            return TrafficLightInfo(light_location[0], light_location[1], state)
+
+            # get closest stop_line
+            x, y = self.config['stop_line_positions'][traffic_light_idx]
+
+            return TrafficLightInfo(x, y, state)
 
         return TrafficLightInfo(0, 0, TrafficLight.UNKNOWN)
 
