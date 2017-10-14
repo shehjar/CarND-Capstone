@@ -24,6 +24,7 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
 LOOKAHEAD_WPS = 200  # Number of waypoints we will publish. You can change this number
+MIN_VELOCITY = 1 # Minimum waypoint velocity
 
 class WaypointUpdater(object):
     def __init__(self):
@@ -111,15 +112,17 @@ class WaypointUpdater(object):
                 #
                 delta = velocity / tl_distance_idx
                 #
-                # update waypoints' velocity, set 0 after TL
+                # update waypoints' velocity, set 0 after TL.
+                # Also set 0 under the MIN_VELOCITY to avoid zigzag-steering in slow
+                # speeds.
                 #
                 for idx in range(len(final_waypoints.waypoints)):
-                    if idx < tl_distance_idx:
+                    if idx < tl_distance_idx and velocity - delta > MIN_VELOCITY:
                         velocity -= delta
                     else:
                         velocity = 0
                     final_waypoints.waypoints[idx].twist.twist.linear.x = velocity
-            #
+
             # save adjusted waypoints
             #
             with self.lock:
