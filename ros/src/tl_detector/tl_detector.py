@@ -134,14 +134,12 @@ class TLDetector(object):
             if abs(yaw - heading) < limit_angle:
                 distance = math.sqrt((x - pose.position.x) ** 2 + (y - pose.position.y) ** 2)
                 # ignore traffic light if it is too far
-                if distance > max_distance:
-                    break
-
-                if distance <= min_distance:
-                    traffic_light_idx = idx
-                    min_distance = distance
-                else:
-                    break
+                if distance <= max_distance:
+                    if distance <= min_distance:
+                        traffic_light_idx = idx
+                        min_distance = distance
+                    else:
+                        break
 
         #rospy.loginfo("traffic_light_idx = %d", traffic_light_idx)
         return traffic_light_idx
@@ -267,7 +265,7 @@ class TLDetector(object):
         print(x, y, distance, tl_image.shape)
         self.bgr8_pub.publish(self.bridge.cv2_to_imgmsg(tl_image, encoding))
         #Get classification
-        return self.light_classifier.get_classification(tl_image)
+        return self.light_classifier.get_classification(cv_image if self.is_simulator else tl_image)
 
     def process_traffic_lights(self):
         """Finds closest visible traffic light, if one exists, and determines its
@@ -278,14 +276,11 @@ class TLDetector(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
-        stop_line_positions = self.config['stop_line_positions']
         if self.pose is None:
             return TrafficLightInfo(0, 0, TrafficLight.UNKNOWN)
 
-        traffic_light_idx = self.get_closest_traffic_light(self.pose.pose)
-
         # Find the closest visible traffic light (if one exists)
-        light_location = None
+        traffic_light_idx = self.get_closest_traffic_light(self.pose.pose)
         if traffic_light_idx >= 0:
             item = self.traffic_light_labels[traffic_light_idx]
             light_location = np.array([item.pose.pose.position.x,
