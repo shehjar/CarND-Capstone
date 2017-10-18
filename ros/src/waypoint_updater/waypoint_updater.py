@@ -24,7 +24,6 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
 LOOKAHEAD_WPS = 200  # Number of waypoints we will publish. You can change this number
-MIN_VELOCITY = 1 # Minimum waypoint velocity
 
 class WaypointUpdater(object):
     def __init__(self):
@@ -39,7 +38,6 @@ class WaypointUpdater(object):
 
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
-        # TODO: Add other member variables you need below
         self.waypoints_msg = None
         self.prev_closest_idx = 0
         self.closest_tl_idx = -1
@@ -63,17 +61,6 @@ class WaypointUpdater(object):
             closest_idx = self.get_closest_waypoint(waypoints, msg.pose.position)
             self.prev_closest_idx = closest_idx
             point = waypoints[closest_idx]
-
-            #
-            # adjust it by heading
-            #
-            q = point.pose.pose.orientation
-            position = point.pose.pose.position
-            _, _, yaw = tf.transformations.euler_from_quaternion((q.x, q.y, q.z, q.w))
-            heading = math.atan2((position.y - msg.pose.position.y), (position.x - msg.pose.position.x))
-
-            #if abs(yaw - heading) > (math.pi / 4):
-            #    closest_idx += 1
 
             #
             # compose final waypoints

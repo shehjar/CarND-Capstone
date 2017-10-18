@@ -252,8 +252,6 @@ class TLDetector(object):
         #               (255, 255, 255), 1)
         # self.bgr8_pub.publish(self.bridge.cv2_to_imgmsg(cv_image, encoding))
 
-        #TODO use light location to zoom in on traffic light in image
-
         # Add a black border around the image so we can safely crop it
         cv_image_with_borders = cv2.copyMakeBorder(cv_image,
                                                    box_size, box_size, box_size, box_size,
@@ -262,8 +260,7 @@ class TLDetector(object):
         x1, y1, x2, y2 = x, y, x + 2 * box_size, y + 2 * box_size
         # Crop the box from the camera image
         tl_image = cv_image_with_borders[y1:y2, x1:x2]
-        print(x, y, distance, tl_image.shape)
-        self.bgr8_pub.publish(self.bridge.cv2_to_imgmsg(tl_image, encoding))
+        # self.bgr8_pub.publish(self.bridge.cv2_to_imgmsg(tl_image, encoding))
         #Get classification
         return self.light_classifier.get_classification(cv_image if self.is_simulator else tl_image)
 

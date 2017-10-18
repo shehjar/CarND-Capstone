@@ -33,8 +33,6 @@ class Controller(object):
         current_linear_velocity = current_velocity.twist.linear.x
         current_agular_velocity = current_velocity.twist.angular.z
 
-        #rospy.loginfo("tl = %f, cl = %f, ta = %f", target_linear_velocity, current_linear_velocity, target_angular_velocity)
-
         linear_velocity_error = target_linear_velocity - current_linear_velocity
         time = rospy.get_time()
         delta_t = time - self.prev_time if self.prev_time is not None else 0
@@ -47,7 +45,6 @@ class Controller(object):
 
         brake = 0.0
         if linear_control < 0.0:
-            rospy.loginfo("BRAKE = %f", linear_control)
             brake = -linear_control
 
         steer = self.yaw_controller.get_steering(target_linear_velocity, target_angular_velocity, current_linear_velocity)
