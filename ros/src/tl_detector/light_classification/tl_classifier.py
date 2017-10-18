@@ -27,7 +27,7 @@ GREEN_LIGHT_THRESHOLD = 20
 
 class TLClassifier(object):
     def __init__(self):
-        self.is_simulator = rospy.get_param('/simulator', 0)
+        self.is_simulator = rospy.get_param('/simulator', 1)
 
         if not self.is_simulator:
             self.sess = tf.Session()
@@ -62,15 +62,24 @@ class TLClassifier(object):
             red_mask_2 = cv2.inRange(hsv, lower_red_2, upper_red_2)
             yellow_mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
             green_mask = cv2.inRange(hsv, lower_green, upper_green)
-            if ((np.sum(red_mask_1)+np.sum(red_mask_2)) > RED_LIGHT_THRESHOLD):
+            red_pixels_number = (np.sum(red_mask_1)+np.sum(red_mask_2))
+            green_pixels_number = np.sum(green_mask)
+            yellow_pixels_number = np.sum(yellow_mask)
+            if (red_pixels_number > RED_LIGHT_THRESHOLD and 
+                red_pixels_number > green_pixels_number and
+                red_pixels_number > yellow_pixels_number ):  # make sure we are checking the correct TL
                 #detect red
                 rospy.loginfo("red light ahead")
                 return TrafficLight.RED
-            elif (np.sum(yellow_mask)>YELLOW_LIGHT_THRESHOLD):
+            elif (yellow_pixels_number > YELLOW_LIGHT_THRESHOLD and
+                yellow_pixels_number > red_pixels_number and
+                yellow_pixels_number > green_pixels_number):
                 #detect yellow
                 rospy.loginfo("yellow light ahead")
                 return TrafficLight.YELLOW
-            elif (np.sum(green_mask)>GREEN_LIGHT_THRESHOLD):
+            elif (green_pixels_number>GREEN_LIGHT_THRESHOLD and 
+                green_pixels_number>red_pixels_number and
+                green_pixels_number>yellow_pixels_number):
                 #detect green
                 rospy.loginfo("green light ahead")
                 return TrafficLight.GREEN
