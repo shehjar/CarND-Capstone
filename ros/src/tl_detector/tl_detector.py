@@ -126,13 +126,13 @@ class TLDetector(object):
         q = pose.orientation
         _, _, yaw = tf.transformations.euler_from_quaternion((q.x, q.y, q.z, q.w))
         limit_angle = math.pi / 2
-        max_distance = 100
+        max_distance = 150
         min_distance = float("inf")
         traffic_light_idx = -1
-        for idx, (x, y) in enumerate(self.config['stop_line_positions']):
-            heading = math.atan2((y - pose.position.y), (x - pose.position.x))
+        for idx, item in enumerate(self.traffic_light_labels):
+            heading = math.atan2((item.pose.pose.position.y - pose.position.y), (item.pose.pose.position.x - pose.position.x))
             if abs(yaw - heading) < limit_angle:
-                distance = math.sqrt((x - pose.position.x) ** 2 + (y - pose.position.y) ** 2)
+                distance = math.sqrt((item.pose.pose.position.x - pose.position.x) ** 2 + (item.pose.pose.position.y - pose.position.y) ** 2)
                 # ignore traffic light if it is too far
                 if distance <= max_distance:
                     if distance <= min_distance:

@@ -15,7 +15,7 @@ ONE_MPH = 0.44704
 
 class Controller(object):
     def __init__(self, vehicle_info):
-        self.pid_controller = PID(0.2, 0.002, 0.0, vehicle_info.decel_limit, vehicle_info.accel_limit)
+        self.pid_controller = PID(0.5, 0.002, 0.0, vehicle_info.decel_limit, vehicle_info.accel_limit)
         self.yaw_controller = YawController(vehicle_info.wheel_base, vehicle_info.steer_ratio,
                                             0, vehicle_info.max_lat_accel,
                                             vehicle_info.max_steer_angle)

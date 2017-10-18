@@ -43,8 +43,6 @@ class WaypointUpdater(object):
         self.waypoints_msg = None
         self.prev_closest_idx = 0
         self.closest_tl_idx = -1
-        self.prev_final_waypoints = None
-        self.prev_final_waypoints_start_idx = -1
         #
         # lock is required because in rospy subscriber's callbacks are executed in separate threads
         # https://answers.ros.org/question/110336/python-spin-once-equivalent/
@@ -56,8 +54,6 @@ class WaypointUpdater(object):
         with self.lock:
             waypoints_msg = self.waypoints_msg
             closest_tl_idx = self.closest_tl_idx
-            prev_final_waypoints = self.prev_final_waypoints
-            prev_final_waypoints_start_idx = self.prev_final_waypoints_start_idx
 
         if waypoints_msg is not None:
             waypoints = waypoints_msg.waypoints
@@ -76,8 +72,8 @@ class WaypointUpdater(object):
             _, _, yaw = tf.transformations.euler_from_quaternion((q.x, q.y, q.z, q.w))
             heading = math.atan2((position.y - msg.pose.position.y), (position.x - msg.pose.position.x))
 
-            if abs(yaw - heading) > (math.pi / 4):
-                closest_idx += 1
+            #if abs(yaw - heading) > (math.pi / 4):
+            #    closest_idx += 1
 
             #
             # compose final waypoints
@@ -92,42 +88,26 @@ class WaypointUpdater(object):
             # Adjust speed for TL with read light if present
             #
             tl_distance_idx = closest_tl_idx - closest_idx
-            if tl_distance_idx > 0:
+            if tl_distance_idx > 0 and tl_distance_idx < len(final_waypoints.waypoints):
                 #
                 # create a copy of waypoints as they will be modified
                 #
                 final_waypoints.waypoints = copy.deepcopy(final_waypoints.waypoints)
-                #
-                # Get pose velocity using previous final_points if available
-                #
-                prev_final_waypoints_idx = closest_idx - prev_final_waypoints_start_idx
-                if prev_final_waypoints is not None and \
-                    prev_final_waypoints_start_idx >= 0 and prev_final_waypoints_idx < len(prev_final_waypoints):
 
-                    velocity = prev_final_waypoints[prev_final_waypoints_idx].twist.twist.linear.x
-                else:
-                    velocity = final_waypoints.waypoints[0].twist.twist.linear.x
-                #
-                # compute velocity delta reduction per waypoint
-                #
-                delta = velocity / tl_distance_idx
-                #
-                # update waypoints' velocity, set 0 after TL.
-                # Also set 0 under the MIN_VELOCITY to avoid zigzag-steering in slow
-                # speeds.
-                #
-                for idx in range(len(final_waypoints.waypoints)):
-                    if idx < tl_distance_idx and velocity - delta > MIN_VELOCITY:
-                        velocity -= delta
+                for idx, point in enumerate(final_waypoints.waypoints):
+                    velocity = point.twist.twist.linear.x
+                    if idx <= tl_distance_idx:
+                        distance = self.distance(point.pose.pose.position,
+                                  final_waypoints.waypoints[tl_distance_idx].pose.pose.position)
+                        stop_distance = 5.0
+                        if distance <= stop_distance:
+                            velocity = 0.0
+                        else:
+                            velocity = min(velocity, (distance-stop_distance)*0.1)
                     else:
-                        velocity = 0
-                    final_waypoints.waypoints[idx].twist.twist.linear.x = velocity
+                        velocity = 0.0
 
-            # save adjusted waypoints
-            #
-            with self.lock:
-                self.prev_final_waypoints = final_waypoints.waypoints
-                self.prev_final_waypoints_start_idx = closest_idx
+                    point.twist.twist.linear.x = velocity
             #
             # publish it
             #
@@ -137,9 +117,7 @@ class WaypointUpdater(object):
         with self.lock:
             if self.waypoints_msg is None or self.waypoints_msg.header.stamp != msg.header.stamp:
                 self.waypoints_msg = msg
-                self.prev_closest_idx = 0
                 self.closest_tl_idx = -1
-                self.prev_final_waypoints = None
 
         self.base_waypoints_sub.unregister()
 
@@ -156,8 +134,8 @@ class WaypointUpdater(object):
                 #
                 # find a closest waypoint
                 #
-                position = msg.pose.pose.position
-                closest_tl_idx = self.get_closest_waypoint(waypoints, position)
+                closest_tl_position = msg.pose.pose.position
+                closest_tl_idx = self.get_closest_waypoint(waypoints, closest_tl_position)
 
         with self.lock:
             self.closest_tl_idx = closest_tl_idx
@@ -172,14 +150,13 @@ class WaypointUpdater(object):
         # find a closest waypoint
         #
         closest_idx = self.prev_closest_idx
-        if closest_idx > 5:
-            closest_idx -= 5
+        if closest_idx > 50:
+            closest_idx -= 50
         closest_distance = float("inf")
-        distance = lambda a, b: math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
         for idx in range(closest_idx, len(waypoints)):
             point = waypoints[idx]
-            dist = distance(point.pose.pose.position, position)
-            if dist < closest_distance:
+            dist = self.distance(point.pose.pose.position, position)
+            if dist <= closest_distance:
                 closest_distance = dist
                 closest_idx = idx
             else:
@@ -187,19 +164,9 @@ class WaypointUpdater(object):
 
         return closest_idx
 
-    def get_waypoint_velocity(self, waypoint):
-        return waypoint.twist.twist.linear.x
+    def distance(self, a, b):
+        return math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
 
-    def set_waypoint_velocity(self, waypoints, waypoint, velocity):
-        waypoints[waypoint].twist.twist.linear.x = velocity
-
-    def distance(self, waypoints, wp1, wp2):
-        dist = 0
-        dl = lambda a, b: math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
-        for i in range(wp1, wp2+1):
-            dist += dl(waypoints[wp1].pose.pose.position, waypoints[i].pose.pose.position)
-            wp1 = i
-        return dist
 
 if __name__ == '__main__':
     try:
