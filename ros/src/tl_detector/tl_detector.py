@@ -37,7 +37,7 @@ class TLDetector(object):
         self.state_count = 0
         self.light_classifier = TLClassifier()
 
-        self.is_simulator = rospy.get_param('/simulator', 1)
+        self.is_simulator = rospy.get_param('/simulator', 0)
 
         sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
         #sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)

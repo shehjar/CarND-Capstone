@@ -27,7 +27,7 @@ GREEN_LIGHT_THRESHOLD = 20
 
 class TLClassifier(object):
     def __init__(self):
-        self.is_simulator = rospy.get_param('/simulator', 1)
+        self.is_simulator = rospy.get_param('/simulator', 0)
 
         if not self.is_simulator:
             self.sess = tf.Session()

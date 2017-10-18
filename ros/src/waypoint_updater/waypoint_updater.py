@@ -97,10 +97,8 @@ class WaypointUpdater(object):
                 for idx, point in enumerate(final_waypoints.waypoints):
                     velocity = point.twist.twist.linear.x
                     if idx <= tl_distance_idx:
-                        #distance = self.distance(point.pose.pose.position,
-                         #         final_waypoints.waypoints[tl_distance_idx].pose.pose.position)
                         distance = self.distance(point.pose.pose.position,
-                                  waypoints[closest_idx].pose.pose.position)
+                                  final_waypoints.waypoints[tl_distance_idx].pose.pose.position)
                         stop_distance = 5.0
                         if distance <= stop_distance:
                             velocity = 0.0
