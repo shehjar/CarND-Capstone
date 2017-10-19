@@ -4,7 +4,7 @@ This is the project repo for the final project of the Udacity Self-Driving Car N
 * Alfred Free (xuanyuanzhe at gmail.com)
 * Shehjar Kaul (kaul.shehjar at gmail.com)
 * Andrey Kolishchak (andrey.kolishchak at gmail.com)
-* Mika Qvist (miqqis at gmail.com)
+* Mika Qvist (mika.k.qvist at gmail.com)
 
 ### Traffic Light Classifier
 My task in this project was to develop the traffic light classifier and one can can look into my code [in this repository](https://github.com/shehjar/TL_Classifier)!
